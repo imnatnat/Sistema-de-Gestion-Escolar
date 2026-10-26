@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(redirectUrl, 303);
   }
 
+  // Confirm the email, but require the user to sign in separately.
+  await supabase.auth.signOut({ scope: "local" });
+
   const successUrl = new URL("/login", request.url);
   successUrl.searchParams.set("estado", "confirmado");
 

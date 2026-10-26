@@ -3,20 +3,26 @@ import Script from "next/script";
 import { loginAction } from "@/app/auth/actions";
 import { getTurnstileSiteKey } from "@/lib/security/turnstile";
 
-// Fixed messages only. The ?error= value is never rendered directly.
+// Fixed messages only. Query-string values are never rendered directly.
 const MENSAJES: Record<string, string> = {
   datos: "Revisa tu correo y tu contraseña.",
   credenciales: "Correo o contraseña incorrectos.",
   intentos: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
   captcha: "Completa la verificación de seguridad e inténtalo de nuevo.",
+  confirmacion:
+    "No se pudo confirmar el correo. Solicita un nuevo enlace si es necesario.",
 };
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const searchParams = await props.searchParams;
+
   const codigo =
     typeof searchParams.error === "string" ? searchParams.error : undefined;
+
   const mensaje =
     codigo && Object.hasOwn(MENSAJES, codigo) ? MENSAJES[codigo] : undefined;
+
+  const confirmado = searchParams.estado === "confirmado";
 
   // The proxy puts the per-request nonce in this header (see proxy.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
@@ -31,6 +37,16 @@ export default async function LoginPage(props: PageProps<"/login">) {
       />
 
       <h1 className="text-2xl font-semibold">Iniciar sesión</h1>
+
+      {confirmado && (
+        <p
+          role="status"
+          className="rounded border border-green-300 bg-green-50 p-3 text-green-900"
+        >
+          Tu correo fue confirmado. Ya puedes iniciar sesión. Tu cuenta todavía
+          necesita aprobación para acceder a las funciones de estudiante.
+        </p>
+      )}
 
       {mensaje && (
         <p
