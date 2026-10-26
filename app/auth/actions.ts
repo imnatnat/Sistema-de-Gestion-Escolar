@@ -131,11 +131,8 @@ export async function signupAction(formData: FormData) {
       redirect("/registro?error=captcha");
     }
 
-    // Avoid revealing whether an email is already registered.
     redirect("/registro?error=registro");
   }
-
-  redirect("/registro?estado=correo");
 }
 
 export async function logoutAction() {
