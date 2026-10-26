@@ -5,7 +5,7 @@ import { getSupabaseConfig } from "./lib/supabase/config";
 import { hardenCookieOptions } from "./lib/supabase/cookie-options";
 
 // Everything not listed here requires a valid session (default deny).
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/registro"];
 const PUBLIC_PREFIXES = ["/auth/"];
 
 function isPublic(pathname: string) {
@@ -64,7 +64,10 @@ export async function proxy(request: NextRequest) {
   let target: string | null = null;
   if (!isAuthenticated && !isPublic(pathname)) {
     target = "/login";
-  } else if (isAuthenticated && (pathname === "/login" || pathname === "/")) {
+  } else if (
+    isAuthenticated &&
+    (pathname === "/login" || pathname === "/registro" || pathname === "/")
+  ) {
     target = "/inicio";
   }
 
