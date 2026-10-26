@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Gestión Escolar</title>
+    <style>
+      .oculto {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sistema de Gestión Escolar</h1>
+
+    <main>
+      <!-- Formulario de inicio de sesión -->
+      <div id="vista-login">
+        <h2>Iniciar sesión</h2>
+        <form id="form-login">
+          <label>Correo electrónico</label>
+          <input type="email" id="login-correo" required />
+          <label>Contraseña</label>
+          <input type="password" id="login-password" required />
+          <button type="submit">Entrar</button>
+        </form>
+        <div class="switch">
+          ¿No tienes cuenta? <a onclick="mostrar('registro')">Crear cuenta</a>
+        </div>
+        <div id="login-msg"></div>
+      </div>
+
+      <!-- Formulario de registro -->
+      <div class="oculto" id="vista-registro">
+        <h2>Crear cuenta</h2>
+        <form id="form-registro">
+          <label>Nombre completo</label>
+          <input type="text" id="reg-nombre" required />
+          <label>Correo electrónico</label>
+          <input type="email" id="reg-correo" required />
+          <label>Contraseña</label>
+          <input type="password" id="reg-password" minlength="6" required />
+          <label>Tipo de cuenta</label>
+          <select id="reg-rol">
+            <option value="estudiante">Estudiante</option>
+            <option value="profesor">Profesor</option>
+          </select>
+          <button type="submit">Crear cuenta</button>
+        </form>
+        <div class="switch">
+          ¿Ya tienes cuenta? <a onclick="mostrar('login')">Iniciar sesión</a>
+        </div>
+        <div id="registro-msg"></div>
+      </div>
+
+      <!-- Panel una vez autenticado -->
+      <div class="oculto" id="vista-panel">
+        <h2>Tu cuenta</h2>
+        <div id="perfil-datos">Cargando...</div>
+        <button class="secundario" id="btn-salir">Cerrar sesión</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      // Datos de conexión de tu proyecto de Supabase
+      const SUPABASE_URL = "https://ojqphrcbgzkgjvrgohgj.supabase.co";
+      const SUPABASE_KEY = "sb_publishable_IHhAKSljU8wiA2nkoRRJ3Q_0WHhnMF7";
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      const vistas = {
+        login: document.getElementById("vista-login"),
+        registro: document.getElementById("vista-registro"),
+        panel: document.getElementById("vista-panel"),
+      };
+
+      window.mostrar = function (nombre) {
+        Object.values(vistas).forEach((v) => v.classList.add("oculto"));
+        vistas[nombre].classList.remove("oculto");
+      };
+
+      function setMsg(id, texto, tipo) {
+        const el = document.getElementById(id);
+        el.textContent = texto;
+        el.className = "msg " + tipo;
+      }
+
+      // Registro
+      document
+        .getElementById("form-registro")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const nombre_completo = document
+            .getElementById("reg-nombre")
+            .value.trim();
+          const correo = document.getElementById("reg-correo").value.trim();
+          const password = document.getElementById("reg-password").value;
+          const rol = document.getElementById("reg-rol").value;
+
+          const { error } = await supabase.auth.signUp({
+            email: correo,
+            password,
+            options: { data: { rol, nombre_completo } },
+          });
+
+          if (error) {
+            setMsg("registro-msg", error.message, "error");
+          } else {
+            setMsg(
+              "registro-msg",
+              "Cuenta creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.",
+              "ok",
+            );
+          }
+        });
+
+      // Login
+      document
+        .getElementById("form-login")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const correo = document.getElementById("login-correo").value.trim();
+          const password = document.getElementById("login-password").value;
+
+          const { error } = await supabase.auth.signInWithPassword({
+            email: correo,
+            password,
+          });
+          if (error) setMsg("login-msg", error.message, "error");
+        });
+
+      // Logout
+      document
+        .getElementById("btn-salir")
+        .addEventListener("click", async () => {
+          await supabase.auth.signOut();
+        });
+
+      // Cargar el panel con los datos del perfil
+      async function cargarPanel(user) {
+        mostrar("panel");
+        const contenedor = document.getElementById("perfil-datos");
+        contenedor.textContent = "Cargando...";
+
+        const { data: usuario, error: errUsuario } = await supabase
+          .from("usuarios")
+          .select("correo, rol, fecha_registro")
+          .eq("id_usuario", user.id)
+          .single();
+
+        if (errUsuario || !usuario) {
+          contenedor.textContent =
+            "No se pudo cargar tu perfil todavía. Intenta recargar en unos segundos.";
+          return;
+        }
+
+        let extra = {};
+        if (usuario.rol === "estudiante") {
+          const { data } = await supabase
+            .from("estudiantes")
+            .select("matricula, nombre_completo, carrera, semestre")
+            .eq("id_usuario", user.id)
+            .single();
+          extra = data || {};
+        } else if (usuario.rol === "profesor") {
+          const { data } = await supabase
+            .from("profesores")
+            .select("id_profesor, nombre_completo, especialidad")
+            .eq("id_usuario", user.id)
+            .single();
+          extra = data || {};
+        }
+
+        const filas = [
+          ["Correo", usuario.correo],
+          ["Rol", usuario.rol],
+          ...Object.entries(extra).map(([k, v]) => [k, v ?? "—"]),
+        ];
+
+        contenedor.innerHTML = filas
+          .map(
+            ([k, v]) =>
+              `<div class="perfil-fila"><span>${k}</span><span>${v}</span></div>`,
+          )
+          .join("");
+      }
+
+      // Reaccionar a cambios de sesión (login/logout/carga inicial)
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          cargarPanel(session.user);
+        } else {
+          mostrar("login");
+        }
+      });
+    </script>
+  </body>
+</html>
