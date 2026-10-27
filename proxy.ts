@@ -58,15 +58,56 @@ export async function proxy(request: NextRequest) {
 
   // Verifies the token and refreshes the session if it is about to expire.
   const { data } = await supabase.auth.getClaims();
-  const isAuthenticated = Boolean(data?.claims?.sub);
+  const userId = data?.claims?.sub;
+  const isAuthenticated = Boolean(userId);
   const { pathname } = request.nextUrl;
 
+  let mustWaitForApproval = false;
+
+  if (isAuthenticated && userId) {
+    const { data: usuario, error: usuarioError } = await supabase
+      .from("usuarios")
+      .select("rol")
+      .eq("id_usuario", userId)
+      .maybeSingle();
+
+    if (usuarioError || !usuario) {
+      // Fail closed if the user's role cannot be verified.
+      mustWaitForApproval = true;
+    } else if (usuario.rol === "estudiante") {
+      const { data: estudiante, error: estudianteError } = await supabase
+        .from("estudiantes")
+        .select("aprobado")
+        .eq("id_usuario", userId)
+        .maybeSingle();
+
+      // A missing record, query error, or false value means no access yet.
+      mustWaitForApproval =
+        estudianteError !== null || estudiante?.aprobado !== true;
+    } else if (usuario.rol !== "profesor" && usuario.rol !== "administrador") {
+      // Unknown or unsupported roles do not receive academic access.
+      mustWaitForApproval = true;
+    }
+  }
+
   let target: string | null = null;
+
   if (!isAuthenticated && !isPublic(pathname)) {
     target = "/login";
   } else if (
     isAuthenticated &&
-    (pathname === "/login" || pathname === "/registro" || pathname === "/")
+    mustWaitForApproval &&
+    pathname !== "/pendiente-aprobacion" &&
+    !pathname.startsWith("/auth/")
+  ) {
+    target = "/pendiente-aprobacion";
+  } else if (
+    isAuthenticated &&
+    !mustWaitForApproval &&
+    (pathname === "/pendiente-aprobacion" ||
+      pathname === "/login" ||
+      pathname === "/registro" ||
+      pathname === "/")
   ) {
     target = "/inicio";
   }
