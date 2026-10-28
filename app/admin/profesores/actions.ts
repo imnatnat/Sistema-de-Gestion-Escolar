@@ -37,113 +37,120 @@ export async function crearProfesor(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  let adminUserId: string;
-
   try {
     const { userId } = await requireUser();
     const supabase = getSupabaseAdminClient();
 
-    const { data: usuarioActual, error: errorUsuario } = await supabase
+    const { data: usuarioActual, error: errorRol } = await supabase
       .from("usuarios")
       .select("rol")
       .eq("id_usuario", userId)
       .single();
 
-    if (errorUsuario || usuarioActual?.rol !== "administrador") {
+    if (errorRol || usuarioActual?.rol !== "administrador") {
       return {
         success: false,
         message: "No tienes permisos para registrar profesores.",
       };
     }
 
-    adminUserId = userId;
+    const { data: existente, error: errorConsulta } = await supabase
+      .from("usuarios")
+      .select("id_usuario")
+      .eq("correo", correo)
+      .maybeSingle();
+
+    if (errorConsulta) {
+      return {
+        success: false,
+        message: "No se pudo comprobar si el correo ya está registrado.",
+      };
+    }
+
+    if (existente) {
+      return {
+        success: false,
+        message: "Ese correo ya está registrado en el sistema.",
+      };
+    }
+
+    const { data: invitacion, error: errorInvitacion } =
+      await supabase.auth.admin.inviteUserByEmail(correo, {
+        data: {
+          nombre_completo: nombre,
+          rol: "profesor",
+        },
+      });
+
+    if (errorInvitacion || !invitacion.user) {
+      return {
+        success: false,
+        message:
+          "No se pudo crear la cuenta. Comprueba la configuración de correo de Supabase y que el correo no tenga ya una cuenta.",
+      };
+    }
+
+    const nuevoId = invitacion.user.id;
+
+    const { error: errorPerfil } = await supabase.from("usuarios").insert({
+      id_usuario: nuevoId,
+      correo,
+      rol: "profesor",
+    });
+
+    if (errorPerfil) {
+      const { error: errorEliminarCuenta } =
+        await supabase.auth.admin.deleteUser(nuevoId);
+
+      return {
+        success: false,
+        message: errorEliminarCuenta
+          ? "Falló el registro del perfil y no se pudo limpiar la cuenta automáticamente. Revisa Supabase Auth."
+          : "No se pudo guardar el perfil. Se eliminó la cuenta creada.",
+      };
+    }
+
+    const { error: errorProfesor } = await supabase.from("profesores").insert({
+      id_usuario: nuevoId,
+      nombre_completo: nombre,
+      especialidad: especialidad || null,
+    });
+
+    if (errorProfesor) {
+      const { error: errorEliminarPerfil } = await supabase
+        .from("usuarios")
+        .delete()
+        .eq("id_usuario", nuevoId);
+
+      const { error: errorEliminarCuenta } =
+        await supabase.auth.admin.deleteUser(nuevoId);
+
+      if (errorEliminarPerfil || errorEliminarCuenta) {
+        return {
+          success: false,
+          message:
+            "Falló el registro del profesor y la limpieza quedó incompleta. Revisa las tablas usuarios y profesores, y Supabase Auth.",
+        };
+      }
+
+      return {
+        success: false,
+        message:
+          "No se pudo guardar el registro del profesor. Se limpió la cuenta creada.",
+      };
+    }
+
+    revalidatePath("/admin/profesores");
+    revalidatePath("/inicio");
+
+    return {
+      success: true,
+      message: `Se registró a ${nombre}. Se envió una invitación a su correo.`,
+    };
   } catch {
     return {
       success: false,
-      message: "No se pudo verificar tu sesión.",
+      message: "Ocurrió un error al registrar al profesor.",
     };
   }
-
-  const supabase = getSupabaseAdminClient();
-
-  const { data: cuentaExistente, error: errorConsulta } =
-    await supabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    });
-
-  if (errorConsulta) {
-    return {
-      success: false,
-      message: "No se pudieron verificar las cuentas existentes.",
-    };
-  }
-
-  if (
-    cuentaExistente.users.some((user) => user.email?.toLowerCase() === correo)
-  ) {
-    return {
-      success: false,
-      message: "Ya existe una cuenta con ese correo.",
-    };
-  }
-
-  const { data: nuevaCuenta, error: errorCrearCuenta } =
-    await supabase.auth.admin.inviteUserByEmail(correo, {
-      data: {
-        nombre_completo: nombre,
-        rol: "profesor",
-      },
-    });
-
-  if (errorCrearCuenta || !nuevaCuenta.user) {
-    return {
-      success: false,
-      message:
-        "No se pudo crear la cuenta. Revisa la configuración de correo de Supabase.",
-    };
-  }
-
-  const nuevoId = nuevaCuenta.user.id;
-
-  const { error: errorPerfil } = await supabase.from("usuarios").insert({
-    id_usuario: nuevoId,
-    correo,
-    rol: "profesor",
-  });
-
-  if (errorPerfil) {
-    await supabase.auth.admin.deleteUser(nuevoId);
-
-    return {
-      success: false,
-      message:
-        "No se pudo guardar el perfil del profesor. La cuenta creada se ha eliminado.",
-    };
-  }
-
-  const { error: errorProfesor } = await supabase.from("profesores").insert({
-    id_usuario: nuevoId,
-    nombre_completo: nombre,
-    especialidad: especialidad || null,
-  });
-
-  if (errorProfesor) {
-    await supabase.from("usuarios").delete().eq("id_usuario", nuevoId);
-    await supabase.auth.admin.deleteUser(nuevoId);
-
-    return {
-      success: false,
-      message:
-        "No se pudo guardar el registro del profesor. Se intentó limpiar la cuenta creada.",
-    };
-  }
-
-  revalidatePath("/admin/profesores");
-  revalidatePath("/inicio");
-
-  return {
-    success: true,
-    message: `Se registró a ${nombre}. Se envió una invitación a su correo.`,
-  };
 }
