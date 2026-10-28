@@ -3,6 +3,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { crearProfesor } from "./actions";
 
+async function crearProfesorFormAction(formData: FormData): Promise<void> {
+  "use server";
+
+  await crearProfesor(formData);
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function ProfesoresPage() {
@@ -44,7 +50,7 @@ export default async function ProfesoresPage() {
       <section className="rounded-xl border p-6">
         <h2 className="mb-4 text-xl font-semibold">Registrar profesor</h2>
 
-        <form action={crearProfesor} className="space-y-4">
+        <form action={crearProfesorFormAction} className="space-y-4">
           <div>
             <label htmlFor="nombre_completo" className="mb-1 block font-medium">
               Nombre completo *
