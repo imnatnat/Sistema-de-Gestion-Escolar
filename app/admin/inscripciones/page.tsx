@@ -1,19 +1,57 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
-import { eliminarInscripcionAction } from "./actions";
+import {
+  crearInscripcionAdminAction,
+  eliminarInscripcionAction,
+} from "./actions";
 
 type PageProps = {
   searchParams: Promise<{ estado?: string }>;
 };
 
 const mensajes: Record<string, string> = {
+  creada: "La inscripción se creó correctamente.",
   eliminada: "La inscripción se eliminó correctamente.",
+  duplicada: "Este estudiante ya está inscrito en ese grupo.",
+  "sin-cupo": "El grupo ya alcanzó su cupo máximo.",
+  "estudiante-no-aprobado":
+    "El estudiante todavía no tiene su cuenta aprobada.",
+  "estudiante-no-encontrado": "No se encontró al estudiante seleccionado.",
+  "grupo-no-encontrado": "No se encontró el grupo seleccionado.",
   "tiene-calificacion":
     "No se puede eliminar esta inscripción porque tiene calificaciones asociadas.",
   "no-encontrada": "La inscripción no existe o ya fue eliminada.",
   "solicitud-invalida": "La solicitud no es válida.",
+  "no-autorizado": "No tienes permiso para realizar esta operación.",
   error: "No se pudo completar la operación. Inténtalo nuevamente.",
+};
+
+type Estudiante = {
+  id_usuario: string;
+  matricula: string;
+  nombre_completo: string;
+  aprobado: boolean;
+};
+
+type Grupo = {
+  id_grupo: string;
+  id_materia: string;
+  id_profesor: string;
+  periodo: string;
+  horario: string;
+  cupo_maximo: number;
+};
+
+type Materia = {
+  id_materia: string;
+  nombre: string;
+  clave: string;
+};
+
+type Profesor = {
+  id_usuario: string;
+  nombre_completo: string;
 };
 
 export default async function AdminInscripcionesPage({
@@ -44,19 +82,17 @@ export default async function AdminInscripcionesPage({
       .from("inscripciones")
       .select("id_inscripcion, id_usuario, id_grupo, fecha_inscripcion")
       .order("fecha_inscripcion", { ascending: false }),
-
     supabase
       .from("estudiantes")
-      .select("id_usuario, matricula, nombre_completo"),
-
+      .select("id_usuario, matricula, nombre_completo, aprobado")
+      .order("nombre_completo"),
     supabase
       .from("grupos")
-      .select("id_grupo, id_materia, id_profesor, periodo, horario"),
-
+      .select(
+        "id_grupo, id_materia, id_profesor, periodo, horario, cupo_maximo",
+      ),
     supabase.from("materias").select("id_materia, nombre, clave"),
-
     supabase.from("profesores").select("id_usuario, nombre_completo"),
-
     supabase.from("calificaciones").select("id_inscripcion"),
   ]);
 
@@ -78,61 +114,61 @@ export default async function AdminInscripcionesPage({
     });
 
     return (
-      <main className="mx-auto max-w-5xl p-6 sm:p-8">
-        <h1 className="text-2xl font-semibold">
-          Administración de inscripciones
-        </h1>
-        <p className="mt-4 rounded-lg border p-4" role="alert">
-          No se pudieron cargar las inscripciones. Verifica los permisos de
-          lectura de las tablas en Supabase e inténtalo nuevamente.
+      <main className="mx-auto max-w-5xl space-y-4 p-6 sm:p-8">
+        <h1 className="text-2xl font-bold">Administración de inscripciones</h1>
+        <p role="alert" className="rounded-lg border p-4">
+          No se pudieron cargar los datos. Verifica los permisos de lectura en
+          Supabase e inténtalo nuevamente.
         </p>
-        <Link
-          href="/inicio"
-          className="mt-4 inline-block text-blue-700 underline"
-        >
+        <Link href="/inicio" className="text-blue-700 underline">
           Volver al inicio
         </Link>
       </main>
     );
   }
 
+  const listaEstudiantes = (estudiantes ?? []) as Estudiante[];
+  const listaGrupos = (grupos ?? []) as Grupo[];
+  const listaMaterias = (materias ?? []) as Materia[];
+  const listaProfesores = (profesores ?? []) as Profesor[];
+
   const estudiantesPorId = new Map(
-    (estudiantes ?? []).map((estudiante) => [
-      estudiante.id_usuario,
-      estudiante,
-    ]),
+    listaEstudiantes.map((estudiante) => [estudiante.id_usuario, estudiante]),
   );
 
   const gruposPorId = new Map(
-    (grupos ?? []).map((grupo) => [grupo.id_grupo, grupo]),
+    listaGrupos.map((grupo) => [grupo.id_grupo, grupo]),
   );
 
   const materiasPorId = new Map(
-    (materias ?? []).map((materia) => [materia.id_materia, materia]),
+    listaMaterias.map((materia) => [materia.id_materia, materia]),
   );
 
   const profesoresPorId = new Map(
-    (profesores ?? []).map((profesor) => [profesor.id_usuario, profesor]),
+    listaProfesores.map((profesor) => [profesor.id_usuario, profesor]),
   );
 
   const inscripcionesConCalificacion = new Set(
     (calificaciones ?? []).map((calificacion) => calificacion.id_inscripcion),
   );
 
+  const gruposDisponibles = listaGrupos.filter(
+    (grupo) => Number.isInteger(grupo.cupo_maximo) && grupo.cupo_maximo > 0,
+  );
+
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
+    <main className="mx-auto max-w-7xl space-y-8 p-6 sm:p-8">
       <header>
         <Link href="/inicio" className="text-sm text-blue-700 underline">
           ← Volver al inicio
         </Link>
-
         <h1 className="mt-4 text-3xl font-bold">
           Administración de inscripciones
         </h1>
-
         <p className="mt-2 text-gray-600">
-          Consulta las inscripciones registradas. Solo se pueden eliminar las
-          que no tengan calificaciones asociadas.
+          Administra las inscripciones de los estudiantes. Los grupos no pueden
+          superar su cupo máximo y no se pueden eliminar inscripciones con
+          calificaciones asociadas.
         </p>
       </header>
 
@@ -140,7 +176,7 @@ export default async function AdminInscripcionesPage({
         <p
           role="status"
           className={`rounded-lg border p-3 ${
-            estado === "eliminada"
+            estado === "creada" || estado === "eliminada"
               ? "border-green-300 bg-green-50 text-green-800"
               : "border-red-300 bg-red-50 text-red-800"
           }`}
@@ -148,6 +184,103 @@ export default async function AdminInscripcionesPage({
           {mensajes[estado]}
         </p>
       )}
+
+      <section className="rounded-xl border p-5">
+        <h2 className="text-xl font-semibold">
+          Inscribir estudiante en un grupo
+        </h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Solo aparecen estudiantes aprobados. La disponibilidad del grupo se
+          vuelve a comprobar en Supabase al enviar el formulario.
+        </p>
+
+        {listaEstudiantes.filter((e) => e.aprobado).length === 0 ||
+        gruposDisponibles.length === 0 ? (
+          <p className="mt-4 rounded-lg bg-gray-50 p-4 text-gray-700">
+            Se necesita al menos un estudiante aprobado y un grupo con cupo
+            configurado para crear una inscripción.
+          </p>
+        ) : (
+          <form
+            action={crearInscripcionAdminAction}
+            className="mt-5 grid gap-4 md:grid-cols-3"
+          >
+            <div>
+              <label
+                htmlFor="id_usuario"
+                className="mb-1 block text-sm font-medium"
+              >
+                Estudiante
+              </label>
+              <select
+                id="id_usuario"
+                name="id_usuario"
+                required
+                className="w-full rounded-lg border border-gray-300 bg-white p-3"
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Selecciona un estudiante
+                </option>
+                {listaEstudiantes
+                  .filter((estudiante) => estudiante.aprobado)
+                  .map((estudiante) => (
+                    <option
+                      key={estudiante.id_usuario}
+                      value={estudiante.id_usuario}
+                    >
+                      {estudiante.matricula} — {estudiante.nombre_completo}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="id_grupo"
+                className="mb-1 block text-sm font-medium"
+              >
+                Grupo
+              </label>
+              <select
+                id="id_grupo"
+                name="id_grupo"
+                required
+                defaultValue=""
+                className="w-full rounded-lg border border-gray-300 bg-white p-3"
+              >
+                <option value="" disabled>
+                  Selecciona un grupo
+                </option>
+                {gruposDisponibles.map((grupo) => {
+                  const materia = materiasPorId.get(grupo.id_materia);
+                  const profesor = profesoresPorId.get(grupo.id_profesor);
+
+                  return (
+                    <option key={grupo.id_grupo} value={grupo.id_grupo}>
+                      {materia
+                        ? `${materia.clave} — ${materia.nombre}`
+                        : "Materia no disponible"}{" "}
+                      | {grupo.periodo} | {grupo.horario} | Cupo:{" "}
+                      {grupo.cupo_maximo}
+                      {profesor ? ` | ${profesor.nombre_completo}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-blue-700 px-4 py-3 font-medium text-white hover:bg-blue-800"
+              >
+                Crear inscripción
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
 
       <section>
         <h2 className="mb-4 text-xl font-semibold">
@@ -173,7 +306,6 @@ export default async function AdminInscripcionesPage({
                   <th className="p-3">Acción</th>
                 </tr>
               </thead>
-
               <tbody>
                 {inscripciones.map((inscripcion) => {
                   const estudiante = estudiantesPorId.get(
@@ -215,7 +347,7 @@ export default async function AdminInscripcionesPage({
                       <td className="p-3">
                         {grupo?.horario ?? "No disponible"}
                       </td>
-                      <td className="p-3 whitespace-nowrap">
+                      <td className="whitespace-nowrap p-3">
                         {new Date(inscripcion.fecha_inscripcion).toLocaleString(
                           "es-MX",
                           {
