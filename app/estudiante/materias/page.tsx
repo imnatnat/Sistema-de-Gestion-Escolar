@@ -37,6 +37,13 @@ const mensajes: Record<string, string> = {
   "error-estudiante": "No se pudo verificar tu información.",
   "error-inscripcion": "No se pudo completar la inscripción.",
   "sin-permiso": "No tienes permiso para realizar esta acción.",
+
+  // Estados devueltos por la acción de inscripción.
+  inscrito: "Tu inscripción se registró correctamente.",
+  duplicada: "Ya estás inscrito en este grupo.",
+  sin_cupo: "El grupo ya no tiene lugares disponibles.",
+  no_autorizado: "No tienes permiso para realizar esta acción.",
+  error: "No se pudo completar la inscripción. Inténtalo nuevamente.",
 };
 
 export default async function MateriasPage({
