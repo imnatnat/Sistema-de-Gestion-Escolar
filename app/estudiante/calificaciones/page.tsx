@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
+import { PageHeader } from "@/app/ui/page-header";
+
+export const dynamic = "force-dynamic";
 
 const componentes = [
-  { tipo: "actividad_1", nombre: "Actividad 1" },
-  { tipo: "actividad_2", nombre: "Actividad 2" },
-  { tipo: "actividad_3", nombre: "Actividad 3" },
-  { tipo: "actividad_4", nombre: "Actividad 4" },
-  { tipo: "actividad_5", nombre: "Actividad 5" },
+  { tipo: "actividad_1", nombre: "Act. 1" },
+  { tipo: "actividad_2", nombre: "Act. 2" },
+  { tipo: "actividad_3", nombre: "Act. 3" },
+  { tipo: "actividad_4", nombre: "Act. 4" },
+  { tipo: "actividad_5", nombre: "Act. 5" },
   { tipo: "medio_curso", nombre: "Medio curso" },
   { tipo: "ordinario", nombre: "Ordinario" },
   { tipo: "extraordinario", nombre: "Extraordinario" },
 ] as const;
 
 function formatoCalificacion(valor: number | null | undefined) {
-  return valor === null || valor === undefined
-    ? "Pendiente"
-    : Number(valor).toFixed(2);
+  return valor === null || valor === undefined ? "—" : Number(valor).toFixed(2);
 }
 
 function formatoEstado(estado: string) {
@@ -35,7 +36,6 @@ function formatoEstado(estado: string) {
 export default async function CalificacionesEstudiantePage() {
   const { supabase, userId } = await requireUser();
 
-  // 1. Verificar el rol del usuario.
   const { data: usuario, error: errorRol } = await supabase
     .from("usuarios")
     .select("rol")
@@ -46,74 +46,47 @@ export default async function CalificacionesEstudiantePage() {
     redirect("/inicio");
   }
 
-  // 2. Verificar aprobación del estudiante.
   const { data: estudiante, error: errorEstudiante } = await supabase
     .from("estudiantes")
-    .select("aprobado")
+    .select("aprobado, matricula")
     .eq("id_usuario", userId)
     .maybeSingle();
 
   if (errorEstudiante) {
-    return (
-      <main className="mx-auto w-full max-w-5xl p-8">
-        No se pudo verificar la información del estudiante.
-      </main>
-    );
+    return <main className="p-8">No se pudo cargar tu información.</main>;
   }
 
   if (!estudiante?.aprobado) {
     redirect("/pendiente-aprobacion");
   }
 
-  // 3. Obtener inscripciones del estudiante.
   const { data: inscripciones, error: errorInscripciones } = await supabase
     .from("inscripciones")
     .select("id_inscripcion, id_grupo")
     .eq("id_usuario", userId);
 
   if (errorInscripciones) {
-    console.error("Error cargando inscripciones:", errorInscripciones.code);
-
-    return (
-      <main className="mx-auto w-full max-w-5xl p-8">
-        <Link href="/inicio" className="underline">
-          ← Volver al inicio
-        </Link>
-        <h1 className="mt-6 text-2xl font-semibold">Mis calificaciones</h1>
-        <p className="mt-4">No se pudieron cargar tus inscripciones.</p>
-      </main>
-    );
+    return <main className="p-8">No se pudieron cargar tus materias.</main>;
   }
 
   const listaInscripciones = inscripciones ?? [];
-
   const idsInscripciones = listaInscripciones.map(
     (item) => item.id_inscripcion,
   );
-
   const idsGrupos = [
     ...new Set(listaInscripciones.map((item) => item.id_grupo)),
   ];
 
-  // 4. Obtener grupos.
   const { data: grupos, error: errorGrupos } =
     idsGrupos.length > 0
       ? await supabase
           .from("grupos")
-          .select("id_grupo, id_materia, periodo, horario")
+          .select("id_grupo, id_materia, periodo")
           .in("id_grupo", idsGrupos)
       : { data: [], error: null };
 
-  if (errorGrupos) {
-    console.error("Error cargando grupos:", errorGrupos.code);
-  }
-
   const gruposLista = grupos ?? [];
-
-  // 5. Obtener materias.
-  const idsMaterias = [
-    ...new Set(gruposLista.map((grupo) => grupo.id_materia)),
-  ];
+  const idsMaterias = [...new Set(gruposLista.map((item) => item.id_materia))];
 
   const { data: materias, error: errorMaterias } =
     idsMaterias.length > 0
@@ -123,29 +96,18 @@ export default async function CalificacionesEstudiantePage() {
           .in("id_materia", idsMaterias)
       : { data: [], error: null };
 
-  if (errorMaterias) {
-    console.error("Error cargando materias:", errorMaterias.code);
-  }
-
-  // 6. Obtener oportunidades de evaluación.
   const { data: oportunidades, error: errorOportunidades } =
     idsInscripciones.length > 0
       ? await supabase
           .from("oportunidades_calificacion")
           .select(
-            "id_oportunidad, id_inscripcion, numero_op, id_configuracion, estado, calificacion_final, iniciada_en, cerrada_en",
+            "id_oportunidad, id_inscripcion, numero_op, id_configuracion, estado, calificacion_final",
           )
           .in("id_inscripcion", idsInscripciones)
           .order("numero_op", { ascending: true })
       : { data: [], error: null };
 
-  if (errorOportunidades) {
-    console.error("Error cargando oportunidades:", errorOportunidades.code);
-  }
-
   const oportunidadesLista = oportunidades ?? [];
-
-  // 7. Obtener calificaciones de los componentes.
   const idsOportunidades = oportunidadesLista.map(
     (item) => item.id_oportunidad,
   );
@@ -154,17 +116,10 @@ export default async function CalificacionesEstudiantePage() {
     idsOportunidades.length > 0
       ? await supabase
           .from("calificaciones_componentes")
-          .select(
-            "id_oportunidad, tipo_componente, calificacion, actualizado_en",
-          )
+          .select("id_oportunidad, tipo_componente, calificacion")
           .in("id_oportunidad", idsOportunidades)
       : { data: [], error: null };
 
-  if (errorCalificaciones) {
-    console.error("Error cargando calificaciones:", errorCalificaciones.code);
-  }
-
-  // 8. Obtener porcentajes de las configuraciones.
   const idsConfiguraciones = [
     ...new Set(
       oportunidadesLista
@@ -189,20 +144,14 @@ export default async function CalificacionesEstudiantePage() {
     errorConfiguraciones
   ) {
     return (
-      <main className="mx-auto w-full max-w-5xl p-8">
-        <Link href="/inicio" className="underline">
-          ← Volver al inicio
-        </Link>
-        <h1 className="mt-6 text-2xl font-semibold">Mis calificaciones</h1>
-        <p className="mt-4 rounded-lg border p-4" role="alert">
-          No se pudieron cargar todos los datos de evaluación. Inténtalo
-          nuevamente.
+      <main className="p-8">
+        <p role="alert">
+          No se pudieron cargar todas tus calificaciones. Inténtalo nuevamente.
         </p>
       </main>
     );
   }
 
-  // 9. Crear mapas para relacionar los registros.
   const grupoPorId = new Map(
     gruposLista.map((grupo) => [grupo.id_grupo, grupo]),
   );
@@ -211,272 +160,224 @@ export default async function CalificacionesEstudiantePage() {
     (materias ?? []).map((materia) => [materia.id_materia, materia]),
   );
 
-  const oportunidadesPorInscripcion = new Map<
-    string,
-    (typeof oportunidadesLista)[number][]
-  >();
-
-  for (const oportunidad of oportunidadesLista) {
-    const lista =
-      oportunidadesPorInscripcion.get(oportunidad.id_inscripcion) ?? [];
-
-    oportunidadesPorInscripcion.set(oportunidad.id_inscripcion, [
-      ...lista,
-      oportunidad,
-    ]);
-  }
-
   const calificacionesPorOportunidad = new Map<string, Map<string, number>>();
 
   for (const calificacion of calificaciones ?? []) {
-    const lista =
+    const notas =
       calificacionesPorOportunidad.get(calificacion.id_oportunidad) ??
       new Map<string, number>();
 
-    lista.set(calificacion.tipo_componente, Number(calificacion.calificacion));
+    notas.set(calificacion.tipo_componente, Number(calificacion.calificacion));
 
-    calificacionesPorOportunidad.set(calificacion.id_oportunidad, lista);
+    calificacionesPorOportunidad.set(calificacion.id_oportunidad, notas);
   }
 
   const porcentajesPorConfiguracion = new Map<string, Map<string, number>>();
 
   for (const componente of configuraciones ?? []) {
-    const lista =
+    const porcentajes =
       porcentajesPorConfiguracion.get(componente.id_configuracion) ??
       new Map<string, number>();
 
-    lista.set(componente.tipo_componente, Number(componente.porcentaje));
+    porcentajes.set(componente.tipo_componente, Number(componente.porcentaje));
 
-    porcentajesPorConfiguracion.set(componente.id_configuracion, lista);
+    porcentajesPorConfiguracion.set(componente.id_configuracion, porcentajes);
   }
 
-  // 10. Mostrar información del estudiante.
+  const filas = listaInscripciones.flatMap((inscripcion) => {
+    const grupo = grupoPorId.get(inscripcion.id_grupo);
+    const materia = grupo ? materiaPorId.get(grupo.id_materia) : undefined;
+
+    const historial = oportunidadesLista.filter(
+      (item) => item.id_inscripcion === inscripcion.id_inscripcion,
+    );
+
+    return historial.map((oportunidad) => {
+      const notas =
+        calificacionesPorOportunidad.get(oportunidad.id_oportunidad) ??
+        new Map<string, number>();
+
+      const porcentajes = oportunidad.id_configuracion
+        ? (porcentajesPorConfiguracion.get(oportunidad.id_configuracion) ??
+          new Map<string, number>())
+        : new Map<string, number>();
+
+      const esRegular = [1, 3, 5].includes(oportunidad.numero_op);
+      const esExtraordinaria = [2, 4, 6].includes(oportunidad.numero_op);
+
+      return {
+        id: oportunidad.id_oportunidad,
+        materia: materia?.nombre ?? "Materia no disponible",
+        clave: materia?.clave ?? "—",
+        periodo: grupo?.periodo ?? "—",
+        oportunidad: oportunidad.numero_op,
+        estado: oportunidad.estado,
+        final: oportunidad.calificacion_final,
+        notas,
+        porcentajes,
+        esRegular,
+        esExtraordinaria,
+      };
+    });
+  });
+
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6 sm:p-8">
-      <Link
-        href="/inicio"
-        className="text-sm text-gray-500 hover:text-gray-900"
-      >
-        ← Volver al inicio
-      </Link>
+    <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 p-6 sm:p-8">
+      <PageHeader
+        eyebrow="Portal del estudiante"
+        title="Mis calificaciones"
+        description="Consulta tus actividades, exámenes y resultados por oportunidad."
+      />
 
-      <header>
-        <p className="text-sm text-gray-500">Sistema de Gestión Escolar</p>
+      <section className="rounded-xl border border-gray-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-5">
+          <div>
+            <h2 className="font-semibold text-[#252525]">
+              Registro de calificaciones
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Matrícula: {estudiante.matricula ?? "No disponible"}
+            </p>
+          </div>
 
-        <h1 className="mt-2 text-3xl font-semibold">Mis calificaciones</h1>
+          <span className="text-sm text-gray-500">
+            {filas.length} {filas.length === 1 ? "registro" : "registros"}
+          </span>
+        </div>
 
-        <p className="mt-2 text-sm text-gray-600">
-          Consulta tus calificaciones y el avance de tus oportunidades de
-          evaluación.
-        </p>
-      </header>
-
-      {listaInscripciones.length === 0 ? (
-        <section className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="font-semibold">
-            Todavía no tienes materias inscritas
-          </h2>
-
-          <Link
-            href="/estudiante/materias"
-            className="mt-4 inline-block text-sm underline"
-          >
-            Consultar materias
-          </Link>
-        </section>
-      ) : (
-        <div className="space-y-6">
-          {listaInscripciones.map((inscripcion) => {
-            const grupo = grupoPorId.get(inscripcion.id_grupo);
-
-            const materia = grupo
-              ? materiaPorId.get(grupo.id_materia)
-              : undefined;
-
-            const historial =
-              oportunidadesPorInscripcion.get(inscripcion.id_inscripcion) ?? [];
-
-            const oportunidadActual = historial.find(
-              (item) => item.estado === "en_curso",
-            );
-
-            const ultimaOportunidad =
-              historial.length > 0 ? historial[historial.length - 1] : null;
-
-            const oportunidadVisible = oportunidadActual ?? ultimaOportunidad;
-
-            const aprobado = historial.some(
-              (item) => item.estado === "aprobada",
-            );
-
-            return (
-              <section
-                key={inscripcion.id_inscripcion}
-                className="overflow-hidden rounded-xl border border-gray-200 bg-white"
-              >
-                <div className="border-b border-gray-200 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-lg font-semibold">
-                        {materia?.nombre ?? "Materia no disponible"}
-                      </h2>
-
-                      <p className="mt-1 text-sm text-gray-500">
-                        Clave: {materia?.clave ?? "No disponible"}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        aprobado
-                          ? "bg-green-50 text-green-700"
-                          : oportunidadActual
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-gray-100 text-gray-600"
-                      }`}
+        {listaInscripciones.length === 0 ? (
+          <div className="p-8 text-center">
+            <h3 className="font-medium">
+              Todavía no tienes materias inscritas
+            </h3>
+            <Link
+              href="/estudiante/materias"
+              className="mt-3 inline-block text-sm underline"
+            >
+              Consultar materias
+            </Link>
+          </div>
+        ) : filas.length === 0 ? (
+          <div className="p-8 text-center text-sm text-gray-500">
+            Tus materias todavía no tienen oportunidades de evaluación.
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[1250px] border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#f7f7f5] text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="sticky left-0 z-20 border-b border-r bg-[#f7f7f5] px-4 py-3">
+                    Materia
+                  </th>
+                  <th className="border-b px-3 py-3">Periodo</th>
+                  <th className="border-b px-3 py-3">OP.</th>
+                  {componentes.map((componente) => (
+                    <th
+                      key={componente.tipo}
+                      className="border-b px-3 py-3 text-center"
                     >
-                      {aprobado
-                        ? "Materia aprobada"
-                        : oportunidadActual
-                          ? "En evaluación"
-                          : "Sin oportunidad activa"}
-                    </span>
-                  </div>
+                      {componente.nombre}
+                    </th>
+                  ))}
+                  <th className="border-b px-3 py-3 text-center">Final</th>
+                  <th className="border-b px-4 py-3">Estado</th>
+                </tr>
+              </thead>
 
-                  <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-500">
-                    <p>Periodo: {grupo?.periodo ?? "No disponible"}</p>
-                    <p>Horario: {grupo?.horario ?? "No disponible"}</p>
-                  </div>
-                </div>
+              <tbody>
+                {filas.map((fila) => (
+                  <tr
+                    key={fila.id}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="sticky left-0 z-10 border-r border-gray-100 bg-white px-4 py-3">
+                      <div className="font-medium text-[#252525]">
+                        {fila.materia}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {fila.clave}
+                      </div>
+                    </td>
 
-                {historial.length === 0 ? (
-                  <p className="p-5 text-sm text-gray-500">
-                    Todavía no tienes una oportunidad de evaluación registrada
-                    para esta materia.
-                  </p>
-                ) : (
-                  <div className="space-y-5 p-5">
-                    {historial.map((oportunidad) => {
-                      const notas =
-                        calificacionesPorOportunidad.get(
-                          oportunidad.id_oportunidad,
-                        ) ?? new Map<string, number>();
+                    <td className="whitespace-nowrap px-3 py-3 text-gray-600">
+                      {fila.periodo}
+                    </td>
 
-                      const porcentajes = oportunidad.id_configuracion
-                        ? (porcentajesPorConfiguracion.get(
-                            oportunidad.id_configuracion,
-                          ) ?? new Map<string, number>())
-                        : new Map<string, number>();
+                    <td className="px-3 py-3 font-semibold">
+                      OP{fila.oportunidad}
+                    </td>
 
-                      const esRegular = [1, 3, 5].includes(
-                        oportunidad.numero_op,
-                      );
+                    {componentes.map((componente) => {
+                      const tipo = componente.tipo;
+                      const esExtra = tipo === "extraordinario";
 
-                      const esExtraordinaria = [2, 4, 6].includes(
-                        oportunidad.numero_op,
-                      );
+                      const aplica = fila.esRegular
+                        ? !esExtra && (fila.porcentajes.get(tipo) ?? 0) > 0
+                        : fila.esExtraordinaria && esExtra;
+
+                      const valor = fila.notas.get(tipo);
 
                       return (
-                        <div
-                          key={oportunidad.id_oportunidad}
-                          className="rounded-lg border border-gray-200 p-4"
+                        <td
+                          key={tipo}
+                          className="whitespace-nowrap px-3 py-3 text-center tabular-nums"
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
+                          {!aplica ? (
+                            <span className="text-gray-300">—</span>
+                          ) : (
                             <div>
-                              <h3 className="font-semibold">
-                                Oportunidad {oportunidad.numero_op}
-                              </h3>
+                              <span
+                                className={
+                                  valor === undefined
+                                    ? "text-gray-400"
+                                    : "font-medium text-gray-800"
+                                }
+                              >
+                                {formatoCalificacion(valor)}
+                              </span>
 
-                              <p className="mt-1 text-xs text-gray-500">
-                                {formatoEstado(oportunidad.estado)}
-                              </p>
-                            </div>
-
-                            <div className="text-right">
-                              <p className="text-xs text-gray-500">
-                                Calificación final
-                              </p>
-
-                              <p className="text-xl font-semibold">
-                                {formatoCalificacion(
-                                  oportunidad.calificacion_final,
-                                )}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {componentes.map((componente) => {
-                              const tipo = componente.tipo;
-
-                              const esExtra = tipo === "extraordinario";
-
-                              const aplica = esRegular
-                                ? !esExtra && (porcentajes.get(tipo) ?? 0) > 0
-                                : esExtraordinaria && esExtra;
-
-                              if (!aplica) {
-                                return null;
-                              }
-
-                              const valor = notas.get(tipo);
-
-                              return (
-                                <div
-                                  key={tipo}
-                                  className="rounded-lg border border-gray-100 bg-gray-50 p-3"
-                                >
-                                  <p className="text-sm text-gray-500">
-                                    {componente.nombre}
-                                  </p>
-
-                                  {esRegular && (
-                                    <p className="mt-1 text-xs text-gray-400">
-                                      {porcentajes.get(tipo)?.toFixed(2)}%
-                                    </p>
-                                  )}
-
-                                  <p className="mt-2 font-semibold text-gray-900">
-                                    {formatoCalificacion(valor)}
-                                  </p>
+                              {fila.esRegular && (
+                                <div className="mt-1 text-[10px] text-gray-400">
+                                  {fila.porcentajes.get(tipo)?.toFixed(2)}%
                                 </div>
-                              );
-                            })}
-                          </div>
-
-                          {oportunidad.cerrada_en && (
-                            <p className="mt-3 text-xs text-gray-500">
-                              Cerrada:{" "}
-                              {new Date(oportunidad.cerrada_en).toLocaleString(
-                                "es-MX",
-                                {
-                                  timeZone: "America/Monterrey",
-                                },
                               )}
-                            </p>
+                            </div>
                           )}
-                        </div>
+                        </td>
                       );
                     })}
-                  </div>
-                )}
 
-                {oportunidadVisible && (
-                  <div className="border-t border-gray-200 bg-gray-50 px-5 py-3">
-                    <p className="text-xs text-gray-500">
-                      {aprobado
-                        ? "Has aprobado esta materia."
-                        : oportunidadActual
-                          ? `Actualmente estás cursando la oportunidad ${oportunidadActual.numero_op}.`
-                          : "No tienes una oportunidad de evaluación en curso."}
-                    </p>
-                  </div>
-                )}
-              </section>
-            );
-          })}
+                    <td className="px-3 py-3 text-center font-semibold tabular-nums">
+                      {formatoCalificacion(fila.final)}
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                          fila.estado === "aprobada"
+                            ? "bg-green-50 text-green-700"
+                            : fila.estado === "no_aprobada"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-blue-50 text-blue-700"
+                        }`}
+                      >
+                        {formatoEstado(fila.estado)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="border-t border-gray-200 bg-[#fafaf9] px-5 py-3">
+          <p className="text-xs text-gray-500">
+            Las calificaciones pendientes se muestran como —. Las oportunidades
+            anteriores permanecen disponibles para consulta.
+          </p>
         </div>
-      )}
+      </section>
     </main>
   );
 }
