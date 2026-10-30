@@ -1,14 +1,10 @@
-import { Navigation } from "@/app/ui/navigation";
+import type { ReactNode } from "react";
+import { RoleShell } from "@/app/ui/role-shell";
 
 export default function EstudianteLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <>
-      <Navigation rol="estudiante" />
-      {children}
-    </>
-  );
+}: {
+  children: ReactNode;
+}) {
+  return <RoleShell role="estudiante">{children}</RoleShell>;
 }
