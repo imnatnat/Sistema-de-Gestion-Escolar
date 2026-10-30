@@ -1,15 +1,21 @@
 import { requireUser } from "@/lib/auth/session";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
-import { crearProfesor } from "./actions";
 
-async function crearProfesorFormAction(formData: FormData): Promise<void> {
-  "use server";
-
-  await crearProfesor(formData);
-}
+import { PageHeader } from "@/app/ui/page-header";
+import { DataTable } from "@/app/ui/data-table";
+import type { DataTableColumn } from "@/app/ui/data-table";
+import { StatusMessage } from "@/app/ui/status-message";
+import { EmptyState } from "@/app/ui/empty-state";
+import { ProfessorCreateForm } from "./professor-create-form";
 
 export const dynamic = "force-dynamic";
+
+type Profesor = {
+  id_usuario: string;
+  nombre_completo: string;
+  especialidad: string | null;
+};
 
 export default async function ProfesoresPage() {
   let userId: string;
@@ -26,7 +32,7 @@ export default async function ProfesoresPage() {
   const { data: usuario, error: errorUsuario } = await supabase
     .from("usuarios")
     .select("rol")
-    .eq("id_usuario", userId!)
+    .eq("id_usuario", userId)
     .single();
 
   if (errorUsuario || usuario?.rol !== "administrador") {
@@ -38,115 +44,125 @@ export default async function ProfesoresPage() {
     .select("id_usuario, nombre_completo, especialidad")
     .order("nombre_completo", { ascending: true });
 
+  if (errorProfesores) {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <PageHeader
+          eyebrow="Administración"
+          title="Profesores"
+          description="Registra profesores y consulta los que forman parte del sistema."
+        />
+
+        <ProfessorCreateForm />
+
+        <StatusMessage type="error">
+          No se pudo cargar la lista de profesores. Inténtalo nuevamente.
+        </StatusMessage>
+      </div>
+    );
+  }
+
+  const listaProfesores: Profesor[] = profesores ?? [];
+  const ids = listaProfesores.map((profesor) => profesor.id_usuario);
+
+  let correosPorUsuario = new Map<string, string>();
+
+  if (ids.length > 0) {
+    const { data: usuarios, error: errorCorreos } = await supabase
+      .from("usuarios")
+      .select("id_usuario, correo")
+      .in("id_usuario", ids);
+
+    if (errorCorreos || !usuarios) {
+      return (
+        <div className="mx-auto w-full max-w-6xl space-y-6">
+          <PageHeader
+            eyebrow="Administración"
+            title="Profesores"
+            description="Registra profesores y consulta los que forman parte del sistema."
+          />
+
+          <ProfessorCreateForm />
+
+          <StatusMessage type="error">
+            No se pudieron cargar los correos de los profesores.
+          </StatusMessage>
+        </div>
+      );
+    }
+
+    correosPorUsuario = new Map(
+      usuarios.map((usuario) => [usuario.id_usuario, usuario.correo]),
+    );
+  }
+
+  const columns: DataTableColumn<Profesor>[] = [
+    {
+      key: "nombre",
+      header: "Nombre",
+      render: (profesor) => (
+        <span className="font-medium text-[#252525]">
+          {profesor.nombre_completo}
+        </span>
+      ),
+    },
+    {
+      key: "correo",
+      header: "Correo electrónico",
+      render: (profesor) =>
+        correosPorUsuario.get(profesor.id_usuario) ?? "No disponible",
+    },
+    {
+      key: "especialidad",
+      header: "Especialidad",
+      render: (profesor) => profesor.especialidad || "Sin especificar",
+    },
+    {
+      key: "id",
+      header: "ID de usuario",
+      render: (profesor) => (
+        <span className="font-mono text-xs text-[#888888]">
+          {profesor.id_usuario}
+        </span>
+      ),
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-6">
-      <header>
-        <h1 className="text-3xl font-bold">Gestión de profesores</h1>
-        <p className="mt-2 text-gray-600">
-          Registra profesores y consulta los que ya forman parte del sistema.
-        </p>
-      </header>
+    <div className="mx-auto w-full max-w-6xl space-y-7">
+      <PageHeader
+        eyebrow="Administración"
+        title="Profesores"
+        description="Registra profesores y consulta los que forman parte del sistema."
+      />
 
-      <section className="rounded-xl border p-6">
-        <h2 className="mb-4 text-xl font-semibold">Registrar profesor</h2>
+      <ProfessorCreateForm />
 
-        <form action={crearProfesorFormAction} className="space-y-4">
-          <div>
-            <label htmlFor="nombre_completo" className="mb-1 block font-medium">
-              Nombre completo *
-            </label>
-            <input
-              id="nombre_completo"
-              name="nombre_completo"
-              type="text"
-              maxLength={150}
-              autoComplete="name"
-              required
-              className="w-full rounded-lg border px-3 py-2"
-              placeholder="Nombre del profesor"
-            />
-          </div>
+      <section className="space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-semibold text-[#252525]">
+            Profesores registrados
+          </h2>
 
-          <div>
-            <label htmlFor="correo" className="mb-1 block font-medium">
-              Correo electrónico *
-            </label>
-            <input
-              id="correo"
-              name="correo"
-              type="email"
-              maxLength={254}
-              autoComplete="email"
-              required
-              className="w-full rounded-lg border px-3 py-2"
-              placeholder="profesor@universidad.edu"
-            />
-          </div>
+          <span className="text-sm text-[#888888]">
+            {listaProfesores.length}{" "}
+            {listaProfesores.length === 1 ? "profesor" : "profesores"}
+          </span>
+        </div>
 
-          <div>
-            <label htmlFor="especialidad" className="mb-1 block font-medium">
-              Especialidad
-            </label>
-            <input
-              id="especialidad"
-              name="especialidad"
-              type="text"
-              maxLength={150}
-              className="w-full rounded-lg border px-3 py-2"
-              placeholder="Ej. Matemáticas"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="rounded-lg bg-blue-700 px-5 py-2 font-medium text-white hover:bg-blue-800"
-          >
-            Registrar profesor
-          </button>
-        </form>
-      </section>
-
-      <section className="rounded-xl border p-6">
-        <h2 className="mb-4 text-xl font-semibold">Profesores registrados</h2>
-
-        {errorProfesores ? (
-          <p role="alert" className="text-red-700">
-            No se pudo cargar la lista de profesores.
-          </p>
-        ) : !profesores || profesores.length === 0 ? (
-          <p className="text-gray-600">
-            Todavía no hay profesores registrados.
-          </p>
+        {listaProfesores.length === 0 ? (
+          <EmptyState
+            title="Todavía no hay profesores registrados"
+            description="Cuando registres un profesor, aparecerá en esta lista."
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b">
-                  <th className="px-3 py-3">Nombre</th>
-                  <th className="px-3 py-3">Especialidad</th>
-                  <th className="px-3 py-3">ID de usuario</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profesores.map((profesor) => (
-                  <tr
-                    key={profesor.id_usuario}
-                    className="border-b last:border-0"
-                  >
-                    <td className="px-3 py-3">{profesor.nombre_completo}</td>
-                    <td className="px-3 py-3">
-                      {profesor.especialidad || "Sin especificar"}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      {profesor.id_usuario}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={columns}
+            rows={listaProfesores}
+            getRowKey={(profesor) => profesor.id_usuario}
+          />
         )}
       </section>
-    </main>
+    </div>
   );
 }
