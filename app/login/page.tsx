@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { headers } from "next/headers";
 import Script from "next/script";
 import { loginAction } from "@/app/auth/actions";
@@ -95,6 +96,16 @@ export default async function LoginPage(props: PageProps<"/login">) {
           Entrar
         </button>
       </form>
+
+      <p className="text-sm text-gray-600">
+        ¿No tienes una cuenta?{" "}
+        <Link
+          href="/registro"
+          className="font-medium text-black underline underline-offset-4"
+        >
+          Crear cuenta
+        </Link>
+      </p>
     </main>
   );
 }
