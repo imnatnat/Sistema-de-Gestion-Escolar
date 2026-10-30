@@ -100,7 +100,10 @@ export async function guardarConfiguracionEvaluacionAction(formData: FormData) {
     volverConEstado("datos-invalidos");
   }
 
-  const total = porcentajes.reduce((suma, valor) => suma + (valor ?? 0), 0);
+  const total = porcentajes.reduce<number>(
+    (suma, valor) => suma + (valor as number),
+    0,
+  );
 
   if (Math.round(total * 100) !== 10000) {
     volverConEstado("total-invalido");
