@@ -58,6 +58,7 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
 
   if (errorGrupos) {
     console.error("Error cargando grupos:", errorGrupos.code);
+
     return (
       <main className="mx-auto max-w-7xl p-6">
         <h1 className="text-2xl font-semibold">Mis grupos</h1>
@@ -94,9 +95,11 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
   }
 
   const inscripcionesLista = inscripciones ?? [];
+
   const idsUsuarios = [
     ...new Set(inscripcionesLista.map((item) => item.id_usuario)),
   ];
+
   const idsInscripciones = inscripcionesLista.map(
     (item) => item.id_inscripcion,
   );
@@ -131,6 +134,7 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
   }
 
   const oportunidadesLista = oportunidades ?? [];
+
   const idsOportunidades = oportunidadesLista.map(
     (item) => item.id_oportunidad,
   );
@@ -452,7 +456,9 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
                                     key={tipo}
                                     className="px-2 py-3 text-center"
                                   >
-                                    {aplica && oportunidadActual ? (
+                                    {aplica &&
+                                    oportunidadActual &&
+                                    valor === undefined ? (
                                       <form
                                         action={
                                           guardarCalificacionOportunidadAction
@@ -479,7 +485,6 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
                                           max="100"
                                           step="0.01"
                                           required
-                                          defaultValue={valor ?? ""}
                                           aria-label={`${componente.nombre} de ${estudiante?.nombre_completo ?? "estudiante"}`}
                                           className="w-[76px] rounded-md border border-gray-200 px-2 py-2 text-center text-sm outline-none focus:border-gray-500"
                                         />
@@ -494,9 +499,9 @@ export default async function ProfesorGruposPage({ searchParams }: PageProps) {
                                         </button>
                                       </form>
                                     ) : (
-                                      <span className="text-gray-300">
-                                        {valor !== undefined
-                                          ? formatoCalificacion(valor)
+                                      <span className="font-medium text-gray-700">
+                                        {aplica
+                                          ? formatoCalificacion(valor ?? null)
                                           : "—"}
                                       </span>
                                     )}
