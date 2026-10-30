@@ -7,9 +7,10 @@ import { requireUser } from "@/lib/auth/session";
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function volverConEstado(estado: string): never {
-  redirect(`/admin/inscripciones?estado=${encodeURIComponent(estado)}`);
-}
+export type InscripcionActionResult = {
+  success: boolean;
+  message: string;
+};
 
 async function verificarAdministrador() {
   const { supabase, userId } = await requireUser();
@@ -27,7 +28,10 @@ async function verificarAdministrador() {
   return { supabase };
 }
 
-export async function crearInscripcionAdminAction(formData: FormData) {
+export async function crearInscripcionAdminAction(
+  _previousState: InscripcionActionResult,
+  formData: FormData,
+): Promise<InscripcionActionResult> {
   const idUsuario = formData.get("id_usuario");
   const idGrupo = formData.get("id_grupo");
 
@@ -37,7 +41,10 @@ export async function crearInscripcionAdminAction(formData: FormData) {
     typeof idGrupo !== "string" ||
     !UUID_REGEX.test(idGrupo)
   ) {
-    volverConEstado("solicitud-invalida");
+    return {
+      success: false,
+      message: "La solicitud no es válida.",
+    };
   }
 
   const { supabase } = await verificarAdministrador();
@@ -53,11 +60,13 @@ export async function crearInscripcionAdminAction(formData: FormData) {
   if (error) {
     console.error("Error creando inscripción:", error.code);
 
-    if (error.code === "42501") {
-      volverConEstado("no-autorizado");
-    }
-
-    volverConEstado("error");
+    return {
+      success: false,
+      message:
+        error.code === "42501"
+          ? "No tienes permiso para realizar esta operación."
+          : "No se pudo completar la inscripción. Inténtalo nuevamente.",
+    };
   }
 
   switch (data) {
@@ -66,33 +75,61 @@ export async function crearInscripcionAdminAction(formData: FormData) {
       revalidatePath("/admin/grupos");
       revalidatePath("/estudiante/inscripciones");
       revalidatePath("/estudiante/materias");
-      volverConEstado("creada");
+
+      return {
+        success: true,
+        message: "La inscripción se creó correctamente.",
+      };
 
     case "duplicada":
-      volverConEstado("duplicada");
+      return {
+        success: false,
+        message: "Este estudiante ya está inscrito en ese grupo.",
+      };
 
     case "sin_cupo":
-      volverConEstado("sin-cupo");
+      return {
+        success: false,
+        message: "El grupo ya alcanzó su cupo máximo.",
+      };
 
     case "estudiante_no_aprobado":
-      volverConEstado("estudiante-no-aprobado");
+      return {
+        success: false,
+        message: "El estudiante todavía no tiene su cuenta aprobada.",
+      };
 
     case "estudiante_no_encontrado":
-      volverConEstado("estudiante-no-encontrado");
+      return {
+        success: false,
+        message: "No se encontró al estudiante seleccionado.",
+      };
 
     case "grupo_no_encontrado":
-      volverConEstado("grupo-no-encontrado");
+      return {
+        success: false,
+        message: "No se encontró el grupo seleccionado.",
+      };
 
     default:
-      volverConEstado("error");
+      return {
+        success: false,
+        message: "No se pudo completar la operación. Inténtalo nuevamente.",
+      };
   }
 }
 
-export async function eliminarInscripcionAction(formData: FormData) {
+export async function eliminarInscripcionAction(
+  _previousState: InscripcionActionResult,
+  formData: FormData,
+): Promise<InscripcionActionResult> {
   const idInscripcion = formData.get("id_inscripcion");
 
   if (typeof idInscripcion !== "string" || !UUID_REGEX.test(idInscripcion)) {
-    volverConEstado("solicitud-invalida");
+    return {
+      success: false,
+      message: "La solicitud no es válida.",
+    };
   }
 
   const { supabase } = await verificarAdministrador();
@@ -105,11 +142,18 @@ export async function eliminarInscripcionAction(formData: FormData) {
 
   if (errorInscripcion) {
     console.error("Error consultando inscripción:", errorInscripcion.code);
-    volverConEstado("error");
+
+    return {
+      success: false,
+      message: "No se pudo consultar la inscripción.",
+    };
   }
 
   if (!inscripcion) {
-    volverConEstado("no-encontrada");
+    return {
+      success: false,
+      message: "La inscripción no existe o ya fue eliminada.",
+    };
   }
 
   const { data: calificacion, error: errorCalificacion } = await supabase
@@ -121,11 +165,19 @@ export async function eliminarInscripcionAction(formData: FormData) {
 
   if (errorCalificacion) {
     console.error("Error consultando calificaciones:", errorCalificacion.code);
-    volverConEstado("error");
+
+    return {
+      success: false,
+      message: "No se pudieron consultar las calificaciones.",
+    };
   }
 
   if (calificacion) {
-    volverConEstado("tiene-calificacion");
+    return {
+      success: false,
+      message:
+        "No se puede eliminar esta inscripción porque tiene calificaciones asociadas.",
+    };
   }
 
   const { data: eliminada, error: errorEliminar } = await supabase
@@ -139,14 +191,24 @@ export async function eliminarInscripcionAction(formData: FormData) {
     console.error("Error eliminando inscripción:", errorEliminar.code);
 
     if (errorEliminar.code === "23503") {
-      volverConEstado("tiene-calificacion");
+      return {
+        success: false,
+        message:
+          "No se puede eliminar esta inscripción porque tiene calificaciones asociadas.",
+      };
     }
 
-    volverConEstado("error");
+    return {
+      success: false,
+      message: "No se pudo eliminar la inscripción.",
+    };
   }
 
   if (!eliminada) {
-    volverConEstado("no-encontrada");
+    return {
+      success: false,
+      message: "La inscripción no existe o ya fue eliminada.",
+    };
   }
 
   revalidatePath("/admin/inscripciones");
@@ -155,5 +217,8 @@ export async function eliminarInscripcionAction(formData: FormData) {
   revalidatePath("/estudiante/materias");
   revalidatePath("/estudiante/calificaciones");
 
-  volverConEstado("eliminada");
+  return {
+    success: true,
+    message: "La inscripción se eliminó correctamente.",
+  };
 }
