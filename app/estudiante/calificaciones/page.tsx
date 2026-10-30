@@ -119,6 +119,9 @@ export default async function CalificacionesEstudiantePage() {
           .select("id_oportunidad, tipo_componente, calificacion")
           .in("id_oportunidad", idsOportunidades)
       : { data: [], error: null };
+  console.log("IDs de oportunidades:", idsOportunidades);
+  console.log("Calificaciones del estudiante:", calificaciones);
+  console.log("Error de calificaciones:", errorCalificaciones);
 
   const idsConfiguraciones = [
     ...new Set(
