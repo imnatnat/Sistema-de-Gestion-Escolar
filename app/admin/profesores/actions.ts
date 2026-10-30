@@ -154,3 +154,10 @@ export async function crearProfesor(formData: FormData): Promise<ActionResult> {
     };
   }
 }
+
+export async function crearProfesorFormAction(
+  _previousState: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  return crearProfesor(formData);
+}
