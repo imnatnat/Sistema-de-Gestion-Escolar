@@ -1,13 +1,17 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
+import { revalidatePath } from "next/cache";
 
-function volverConEstado(estado: string): never {
-  redirect(`/admin/grupos?estado=${encodeURIComponent(estado)}`);
-}
+export type GrupoActionResult = {
+  success: boolean;
+  message: string;
+};
 
-export async function crearGrupoAction(formData: FormData) {
+export async function crearGrupoAction(
+  _previousState: GrupoActionResult,
+  formData: FormData,
+): Promise<GrupoActionResult> {
   const { supabase, userId } = await requireUser();
 
   const { data: usuario, error: errorRol } = await supabase
@@ -17,7 +21,10 @@ export async function crearGrupoAction(formData: FormData) {
     .single();
 
   if (errorRol || usuario?.rol !== "administrador") {
-    volverConEstado("sin-permiso");
+    return {
+      success: false,
+      message: "No tienes permiso para administrar grupos.",
+    };
   }
 
   const idMateria = String(formData.get("id_materia") ?? "").trim();
@@ -30,7 +37,10 @@ export async function crearGrupoAction(formData: FormData) {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   if (!idMateria || !idProfesor || !periodo || !horario || !cupoTexto) {
-    volverConEstado("campos-obligatorios");
+    return {
+      success: false,
+      message: "Completa todos los campos obligatorios.",
+    };
   }
 
   if (
@@ -40,13 +50,19 @@ export async function crearGrupoAction(formData: FormData) {
     horario.length > 200 ||
     !/^\d+$/.test(cupoTexto)
   ) {
-    volverConEstado("datos-invalidos");
+    return {
+      success: false,
+      message: "Revisa los datos ingresados.",
+    };
   }
 
   const cupoMaximo = Number(cupoTexto);
 
   if (!Number.isSafeInteger(cupoMaximo) || cupoMaximo < 1 || cupoMaximo > 500) {
-    volverConEstado("datos-invalidos");
+    return {
+      success: false,
+      message: "El cupo máximo debe estar entre 1 y 500.",
+    };
   }
 
   const { data: materia, error: errorMateria } = await supabase
@@ -56,7 +72,10 @@ export async function crearGrupoAction(formData: FormData) {
     .maybeSingle();
 
   if (errorMateria || !materia) {
-    volverConEstado("materia-invalida");
+    return {
+      success: false,
+      message: "Selecciona una materia válida.",
+    };
   }
 
   const { data: profesor, error: errorProfesor } = await supabase
@@ -66,7 +85,10 @@ export async function crearGrupoAction(formData: FormData) {
     .maybeSingle();
 
   if (errorProfesor || !profesor) {
-    volverConEstado("profesor-invalido");
+    return {
+      success: false,
+      message: "Selecciona un profesor válido.",
+    };
   }
 
   const { error } = await supabase.from("grupos").insert({
@@ -79,8 +101,18 @@ export async function crearGrupoAction(formData: FormData) {
 
   if (error) {
     console.error("Error al crear grupo:", error.code);
-    volverConEstado("error-guardar");
+
+    return {
+      success: false,
+      message: "No se pudo guardar el grupo. Inténtalo de nuevo.",
+    };
   }
 
-  volverConEstado("creado");
+  revalidatePath("/admin/grupos");
+  revalidatePath("/inicio");
+
+  return {
+    success: true,
+    message: "Grupo creado correctamente.",
+  };
 }
