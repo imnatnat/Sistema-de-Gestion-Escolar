@@ -8,11 +8,11 @@ const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const componentesPermitidos = new Set([
-  "activity_1",
-  "activity_2",
-  "activity_3",
-  "activity_4",
-  "activity_5",
+  "actividad_1",
+  "actividad_2",
+  "actividad_3",
+  "actividad_4",
+  "actividad_5",
   "medio_curso",
   "ordinario",
   "extraordinario",

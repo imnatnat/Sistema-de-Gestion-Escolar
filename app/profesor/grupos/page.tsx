@@ -21,11 +21,11 @@ const mensajes: Record<string, string> = {
 };
 
 const componentes = [
-  { tipo: "activity_1", nombre: "Actividad 1" },
-  { tipo: "activity_2", nombre: "Actividad 2" },
-  { tipo: "activity_3", nombre: "Actividad 3" },
-  { tipo: "activity_4", nombre: "Actividad 4" },
-  { tipo: "activity_5", nombre: "Actividad 5" },
+  { tipo: "actividad_1", nombre: "Actividad 1" },
+  { tipo: "actividad_2", nombre: "Actividad 2" },
+  { tipo: "actividad_3", nombre: "Actividad 3" },
+  { tipo: "actividad_4", nombre: "Actividad 4" },
+  { tipo: "actividad_5", nombre: "Actividad 5" },
   { tipo: "medio_curso", nombre: "Medio curso" },
   { tipo: "ordinario", nombre: "Ordinario" },
   { tipo: "extraordinario", nombre: "Extraordinario" },
