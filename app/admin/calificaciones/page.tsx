@@ -2,6 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { actualizarCalificacionAction } from "./actions";
+import { Button } from "@/app/ui/button";
+import { TextInput } from "@/app/ui/form-controls";
+import { StatusMessage } from "@/app/ui/status-message";
 
 type PageProps = {
   searchParams: Promise<{ estado?: string }>;
@@ -17,6 +20,16 @@ const mensajes: Record<string, string> = {
     "No se actualizó el registro. Verifica los permisos de la base de datos.",
   error: "No se pudo completar la operación. Inténtalo nuevamente.",
 };
+
+function formatearFecha(fecha: string | null | undefined) {
+  if (!fecha) return "No disponible";
+
+  return new Date(fecha).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Monterrey",
+  });
+}
 
 export default async function AdminCalificacionesPage({
   searchParams,
@@ -84,17 +97,19 @@ export default async function AdminCalificacionesPage({
     });
 
     return (
-      <main className="mx-auto max-w-5xl p-6 sm:p-8">
-        <h1 className="text-2xl font-semibold">
+      <main className="mx-auto max-w-7xl space-y-5 p-6 sm:p-8">
+        <h1 className="text-2xl font-semibold text-[#252525]">
           Administración de calificaciones
         </h1>
-        <p className="mt-4 rounded-lg border p-4" role="alert">
+
+        <StatusMessage type="error">
           No se pudieron cargar las calificaciones. Verifica los permisos de
           lectura en Supabase e inténtalo nuevamente.
-        </p>
+        </StatusMessage>
+
         <Link
           href="/inicio"
-          className="mt-4 inline-block text-blue-700 underline"
+          className="inline-block text-sm text-[#373737] underline"
         >
           Volver al inicio
         </Link>
@@ -128,222 +143,330 @@ export default async function AdminCalificacionesPage({
     (profesores ?? []).map((profesor) => [profesor.id_usuario, profesor]),
   );
 
+  const registros = (calificaciones ?? []).map((calificacion) => {
+    const inscripcion = inscripcionesPorId.get(calificacion.id_inscripcion);
+
+    const estudiante = inscripcion
+      ? estudiantesPorId.get(inscripcion.id_usuario)
+      : undefined;
+
+    const grupo = inscripcion
+      ? gruposPorId.get(inscripcion.id_grupo)
+      : undefined;
+
+    const materia = grupo ? materiasPorId.get(grupo.id_materia) : undefined;
+
+    const profesor = grupo ? profesoresPorId.get(grupo.id_profesor) : undefined;
+
+    return {
+      calificacion,
+      estudiante,
+      grupo,
+      materia,
+      profesor,
+      grupoKey: grupo?.id_grupo ?? "sin-grupo",
+    };
+  });
+
+  const registrosPorGrupo = new Map<string, typeof registros>();
+
+  for (const registro of registros) {
+    const existentes = registrosPorGrupo.get(registro.grupoKey) ?? [];
+
+    existentes.push(registro);
+    registrosPorGrupo.set(registro.grupoKey, existentes);
+  }
+
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
-      <header>
-        <Link href="/inicio" className="text-sm text-blue-700 underline">
+    <main className="mx-auto max-w-[1500px] space-y-6 p-5 sm:p-8">
+      <header className="space-y-2">
+        <Link
+          href="/inicio"
+          className="text-sm text-[#787774] transition-colors hover:text-[#252525]"
+        >
           ← Volver al inicio
         </Link>
 
-        <h1 className="mt-4 text-3xl font-bold">
-          Administración de calificaciones
-        </h1>
+        <div className="pt-2">
+          <h1 className="text-3xl font-semibold tracking-tight text-[#252525]">
+            Calificaciones
+          </h1>
 
-        <p className="mt-2 text-gray-600">
-          Consulta y corrige los registros de calificaciones. Los cambios
-          respetan los permisos definidos en Supabase.
-        </p>
+          <p className="mt-2 text-sm text-[#787774]">
+            Consulta y edita las calificaciones de los estudiantes por grupo.
+          </p>
+        </div>
       </header>
 
       {estado && mensajes[estado] && (
-        <p
-          role="status"
-          className={`rounded-lg border p-3 ${
-            estado === "actualizada"
-              ? "border-green-300 bg-green-50 text-green-800"
-              : "border-red-300 bg-red-50 text-red-800"
-          }`}
-        >
+        <StatusMessage type={estado === "actualizada" ? "success" : "error"}>
           {mensajes[estado]}
-        </p>
+        </StatusMessage>
       )}
 
-      <section>
-        <h2 className="mb-4 text-xl font-semibold">
-          Registros de calificaciones ({calificaciones?.length ?? 0})
-        </h2>
-
-        {!calificaciones || calificaciones.length === 0 ? (
-          <p className="rounded-xl border p-6 text-gray-600">
-            Todavía no hay registros de calificaciones.
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[#252525]">
+            Registros académicos
+          </h2>
+          <p className="mt-1 text-sm text-[#787774]">
+            {registros.length} estudiantes con registro de calificación
           </p>
-        ) : (
-          <div className="space-y-5">
-            {calificaciones.map((calificacion) => {
-              const inscripcion = inscripcionesPorId.get(
-                calificacion.id_inscripcion,
+        </div>
+      </div>
+
+      {registros.length === 0 ? (
+        <div className="rounded-lg border border-[#E9E9E7] bg-white px-6 py-12 text-center">
+          <h3 className="font-medium text-[#373737]">
+            No hay calificaciones registradas
+          </h3>
+          <p className="mt-2 text-sm text-[#787774]">
+            Cuando existan registros, aparecerán organizados por grupo.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Array.from(registrosPorGrupo.entries()).map(
+            ([grupoKey, registrosGrupo]) => {
+              const primerRegistro = registrosGrupo[0];
+              const grupo = primerRegistro.grupo;
+              const materia = primerRegistro.materia;
+              const profesor = primerRegistro.profesor;
+
+              const ultimaActualizacion = registrosGrupo.reduce(
+                (fechaMasReciente, registro) => {
+                  const fecha = registro.calificacion.actualizado_en;
+
+                  if (!fecha) return fechaMasReciente;
+
+                  if (
+                    !fechaMasReciente ||
+                    new Date(fecha).getTime() >
+                      new Date(fechaMasReciente).getTime()
+                  ) {
+                    return fecha;
+                  }
+
+                  return fechaMasReciente;
+                },
+                null as string | null,
               );
-              const estudiante = inscripcion
-                ? estudiantesPorId.get(inscripcion.id_usuario)
-                : undefined;
-              const grupo = inscripcion
-                ? gruposPorId.get(inscripcion.id_grupo)
-                : undefined;
-              const materia = grupo
-                ? materiasPorId.get(grupo.id_materia)
-                : undefined;
-              const profesor = grupo
-                ? profesoresPorId.get(grupo.id_profesor)
-                : undefined;
 
               return (
-                <article
-                  key={calificacion.id_calificacion}
-                  className="rounded-xl border p-5"
+                <section
+                  key={grupoKey}
+                  className="overflow-hidden rounded-lg border border-[#E9E9E7] bg-white"
                 >
-                  <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Estudiante</p>
-                      <p className="font-medium">
-                        {estudiante?.nombre_completo ?? "No disponible"}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Matrícula: {estudiante?.matricula ?? "No disponible"}
-                      </p>
+                  <div className="border-b border-[#E9E9E7] bg-[#FAFAF9] p-5">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#999999]">
+                          Registro académico
+                        </p>
+                        <h3 className="mt-1 text-lg font-semibold text-[#252525]">
+                          {materia?.nombre ?? "Materia no disponible"}
+                        </h3>
+                      </div>
+
+                      <span className="rounded-md border border-[#E5E5E3] bg-white px-3 py-1.5 text-xs font-medium text-[#666666]">
+                        {registrosGrupo.length} estudiantes
+                      </span>
                     </div>
 
-                    <div>
-                      <p className="text-sm text-gray-500">Materia</p>
-                      <p className="font-medium">
-                        {materia
-                          ? `${materia.clave} — ${materia.nombre}`
-                          : "No disponible"}
-                      </p>
-                    </div>
+                    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                      <div>
+                        <p className="text-xs text-[#999999]">Periodo</p>
+                        <p className="mt-1 text-sm font-medium text-[#373737]">
+                          {grupo?.periodo ?? "No disponible"}
+                        </p>
+                      </div>
 
-                    <div>
-                      <p className="text-sm text-gray-500">Profesor</p>
-                      <p className="font-medium">
-                        {profesor?.nombre_completo ?? "No disponible"}
-                      </p>
-                    </div>
+                      <div>
+                        <p className="text-xs text-[#999999]">Clave</p>
+                        <p className="mt-1 text-sm font-medium text-[#373737]">
+                          {materia?.clave ?? "No disponible"}
+                        </p>
+                      </div>
 
-                    <div>
-                      <p className="text-sm text-gray-500">Grupo</p>
-                      <p className="font-medium">
-                        {grupo?.periodo ?? "Periodo no disponible"}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {grupo?.horario ?? "Horario no disponible"}
-                      </p>
+                      <div>
+                        <p className="text-xs text-[#999999]">Grupo</p>
+                        <p className="mt-1 text-sm font-medium text-[#373737]">
+                          {grupo?.horario ?? "No disponible"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-[#999999]">Profesor</p>
+                        <p className="mt-1 text-sm font-medium text-[#373737]">
+                          {profesor?.nombre_completo ?? "No disponible"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-[#999999]">
+                          Última actualización
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-[#373737]">
+                          {formatearFecha(ultimaActualizacion)}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <form
-                    action={actualizarCalificacionAction}
-                    className="space-y-4"
-                  >
-                    <input
-                      type="hidden"
-                      name="id_calificacion"
-                      value={calificacion.id_calificacion}
-                    />
+                  <div className="border-b border-[#E9E9E7] px-5 py-3">
+                    <h4 className="text-sm font-semibold text-[#373737]">
+                      Calificaciones
+                    </h4>
+                    <p className="mt-1 text-xs text-[#999999]">
+                      Puedes editar los valores directamente en la tabla.
+                    </p>
+                  </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <div>
-                        <label
-                          htmlFor={`medio-${calificacion.id_calificacion}`}
-                          className="mb-1 block text-sm font-medium"
-                        >
-                          Medio curso
-                        </label>
-                        <input
-                          id={`medio-${calificacion.id_calificacion}`}
-                          name="medio_curso"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          defaultValue={calificacion.medio_curso ?? ""}
-                          className="w-full rounded-lg border p-3"
-                        />
-                      </div>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+                      <thead className="bg-[#F7F7F5]">
+                        <tr className="border-b border-[#E9E9E7]">
+                          <th className="px-4 py-3 text-xs font-semibold text-[#787774]">
+                            Matrícula
+                          </th>
+                          <th className="px-4 py-3 text-xs font-semibold text-[#787774]">
+                            Estudiante
+                          </th>
+                          <th className="w-32 px-3 py-3 text-center text-xs font-semibold text-[#787774]">
+                            Medio curso
+                          </th>
+                          <th className="w-32 px-3 py-3 text-center text-xs font-semibold text-[#787774]">
+                            Ordinario
+                          </th>
+                          <th className="w-32 px-3 py-3 text-center text-xs font-semibold text-[#787774]">
+                            Extraordinario
+                          </th>
+                          <th className="w-28 px-3 py-3 text-center text-xs font-semibold text-[#787774]">
+                            Final
+                          </th>
+                          <th className="w-40 px-3 py-3 text-center text-xs font-semibold text-[#787774]">
+                            Acción
+                          </th>
+                        </tr>
+                      </thead>
 
-                      <div>
-                        <label
-                          htmlFor={`ordinario-${calificacion.id_calificacion}`}
-                          className="mb-1 block text-sm font-medium"
-                        >
-                          Ordinario
-                        </label>
-                        <input
-                          id={`ordinario-${calificacion.id_calificacion}`}
-                          name="ordinario"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          defaultValue={calificacion.ordinario ?? ""}
-                          className="w-full rounded-lg border p-3"
-                        />
-                      </div>
+                      <tbody className="divide-y divide-[#EEEEEC]">
+                        {registrosGrupo.map((registro) => {
+                          const calificacion = registro.calificacion;
+                          const formId = `calificacion-${calificacion.id_calificacion}`;
 
-                      <div>
-                        <label
-                          htmlFor={`extra-${calificacion.id_calificacion}`}
-                          className="mb-1 block text-sm font-medium"
-                        >
-                          Extraordinario
-                        </label>
-                        <input
-                          id={`extra-${calificacion.id_calificacion}`}
-                          name="extraordinario"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          defaultValue={calificacion.extraordinario ?? ""}
-                          className="w-full rounded-lg border p-3"
-                        />
-                      </div>
+                          return (
+                            <tr
+                              key={calificacion.id_calificacion}
+                              className="transition-colors hover:bg-[#FAFAF9]"
+                            >
+                              <td className="whitespace-nowrap px-4 py-3 font-medium text-[#373737]">
+                                {registro.estudiante?.matricula ??
+                                  "No disponible"}
+                              </td>
 
-                      <div>
-                        <label
-                          htmlFor={`final-${calificacion.id_calificacion}`}
-                          className="mb-1 block text-sm font-medium"
-                        >
-                          Calificación final
-                        </label>
-                        <input
-                          id={`final-${calificacion.id_calificacion}`}
-                          name="final"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          defaultValue={calificacion.final ?? ""}
-                          className="w-full rounded-lg border p-3"
-                        />
-                      </div>
-                    </div>
+                              <td className="px-4 py-3 font-medium text-[#373737]">
+                                {registro.estudiante?.nombre_completo ??
+                                  "No disponible"}
+                              </td>
 
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-gray-500">
-                        Última actualización:{" "}
-                        {new Date(calificacion.actualizado_en).toLocaleString(
-                          "es-MX",
-                          {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                            timeZone: "America/Monterrey",
-                          },
-                        )}
-                      </p>
+                              <td className="px-3 py-2">
+                                <TextInput
+                                  form={formId}
+                                  aria-label={`Medio curso de ${registro.estudiante?.nombre_completo ?? "estudiante"}`}
+                                  name="medio_curso"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  defaultValue={calificacion.medio_curso ?? ""}
+                                  className="min-w-20 text-center tabular-nums"
+                                />
+                              </td>
 
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-blue-700 px-5 py-3 font-medium text-white hover:bg-blue-800"
-                      >
-                        Guardar cambios
-                      </button>
-                    </div>
-                  </form>
-                </article>
+                              <td className="px-3 py-2">
+                                <TextInput
+                                  form={formId}
+                                  aria-label={`Ordinario de ${registro.estudiante?.nombre_completo ?? "estudiante"}`}
+                                  name="ordinario"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  defaultValue={calificacion.ordinario ?? ""}
+                                  className="min-w-20 text-center tabular-nums"
+                                />
+                              </td>
+
+                              <td className="px-3 py-2">
+                                <TextInput
+                                  form={formId}
+                                  aria-label={`Extraordinario de ${registro.estudiante?.nombre_completo ?? "estudiante"}`}
+                                  name="extraordinario"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  defaultValue={
+                                    calificacion.extraordinario ?? ""
+                                  }
+                                  className="min-w-20 text-center tabular-nums"
+                                />
+                              </td>
+
+                              <td className="px-3 py-2">
+                                <TextInput
+                                  form={formId}
+                                  aria-label={`Calificación final de ${registro.estudiante?.nombre_completo ?? "estudiante"}`}
+                                  name="final"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  defaultValue={calificacion.final ?? ""}
+                                  className="min-w-20 text-center font-semibold tabular-nums"
+                                />
+                              </td>
+
+                              <td className="px-3 py-2">
+                                <form
+                                  id={formId}
+                                  action={actualizarCalificacionAction}
+                                  className="flex justify-center"
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="id_calificacion"
+                                    value={calificacion.id_calificacion}
+                                  />
+
+                                  <Button
+                                    type="submit"
+                                    className="whitespace-nowrap"
+                                  >
+                                    Guardar
+                                  </Button>
+                                </form>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="border-t border-[#E9E9E7] bg-[#FAFAF9] px-5 py-3">
+                    <p className="text-xs text-[#999999]">
+                      Los campos vacíos se guardan sin calificación. La
+                      calificación final debe ser entera.
+                    </p>
+                  </div>
+                </section>
               );
-            })}
-          </div>
-        )}
-      </section>
+            },
+          )}
+        </div>
+      )}
     </main>
   );
 }
