@@ -50,6 +50,11 @@ const navigation: Record<
   profesor: [
     { label: "Inicio", href: "/inicio", icon: House },
     { label: "Mis grupos", href: "/profesor/grupos", icon: BookOpen },
+    {
+      label: "Evaluación",
+      href: "/profesor/evaluacion",
+      icon: ChartColumn,
+    },
   ],
   estudiante: [
     { label: "Inicio", href: "/inicio", icon: House },
