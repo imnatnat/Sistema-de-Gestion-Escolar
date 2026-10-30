@@ -1,13 +1,17 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
+import { revalidatePath } from "next/cache";
 
-function volverConEstado(estado: string): never {
-  redirect(`/admin/materias?estado=${encodeURIComponent(estado)}`);
-}
+export type MateriaActionResult = {
+  success: boolean;
+  message: string;
+};
 
-export async function crearMateriaAction(formData: FormData) {
+export async function crearMateriaAction(
+  _previousState: MateriaActionResult,
+  formData: FormData,
+): Promise<MateriaActionResult> {
   const { supabase, userId } = await requireUser();
 
   const { data: usuario, error: errorRol } = await supabase
@@ -17,19 +21,27 @@ export async function crearMateriaAction(formData: FormData) {
     .single();
 
   if (errorRol || usuario?.rol !== "administrador") {
-    volverConEstado("sin-permiso");
+    return {
+      success: false,
+      message: "No tienes permiso para administrar materias.",
+    };
   }
 
   const nombre = String(formData.get("nombre") ?? "").trim();
+
   const clave = String(formData.get("clave") ?? "")
     .trim()
     .toUpperCase();
+
   const creditosTexto = String(formData.get("creditos") ?? "").trim();
   const horasTexto = String(formData.get("horas") ?? "").trim();
   const semestreTexto = String(formData.get("semestre") ?? "").trim();
 
   if (!nombre || !clave || !creditosTexto || !horasTexto) {
-    volverConEstado("campos-obligatorios");
+    return {
+      success: false,
+      message: "Completa todos los campos obligatorios.",
+    };
   }
 
   if (
@@ -39,7 +51,10 @@ export async function crearMateriaAction(formData: FormData) {
     !/^\d+$/.test(horasTexto) ||
     (semestreTexto !== "" && !/^\d+$/.test(semestreTexto))
   ) {
-    volverConEstado("datos-invalidos");
+    return {
+      success: false,
+      message: "Revisa los datos: uno o más valores no son válidos.",
+    };
   }
 
   const creditos = Number(creditosTexto);
@@ -56,7 +71,10 @@ export async function crearMateriaAction(formData: FormData) {
     (semestre !== null &&
       (!Number.isSafeInteger(semestre) || semestre < 1 || semestre > 20))
   ) {
-    volverConEstado("datos-invalidos");
+    return {
+      success: false,
+      message: "Revisa los datos: uno o más valores no son válidos.",
+    };
   }
 
   const { error } = await supabase.from("materias").insert({
@@ -69,12 +87,25 @@ export async function crearMateriaAction(formData: FormData) {
 
   if (error) {
     if (error.code === "23505") {
-      volverConEstado("materia-duplicada");
+      return {
+        success: false,
+        message: "Ya existe una materia con esos datos únicos.",
+      };
     }
 
     console.error("Error al crear materia:", error.code);
-    volverConEstado("error-guardar");
+
+    return {
+      success: false,
+      message: "No se pudo guardar la materia. Inténtalo de nuevo.",
+    };
   }
 
-  volverConEstado("creada");
+  revalidatePath("/admin/materias");
+  revalidatePath("/inicio");
+
+  return {
+    success: true,
+    message: "Materia creada correctamente.",
+  };
 }
