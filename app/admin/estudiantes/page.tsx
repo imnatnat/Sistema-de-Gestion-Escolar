@@ -2,10 +2,25 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { aprobarEstudianteAction } from "./actions";
 
+import { Button } from "@/app/ui/button";
+import { PageHeader } from "@/app/ui/page-header";
+import { DataTable } from "@/app/ui/data-table";
+import type { DataTableColumn } from "@/app/ui/data-table";
+import { StatusMessage } from "@/app/ui/status-message";
+import { EmptyState } from "@/app/ui/empty-state";
+
 type PageProps = {
   searchParams: Promise<{
     estado?: string;
   }>;
+};
+
+type Estudiante = {
+  id_usuario: string;
+  matricula: string;
+  nombre_completo: string;
+  carrera: string | null;
+  semestre: number | null;
 };
 
 export default async function AdminEstudiantesPage({
@@ -30,19 +45,32 @@ export default async function AdminEstudiantesPage({
     .eq("aprobado", false)
     .order("nombre_completo");
 
+  const mensajes: Record<string, string> = {
+    aprobado: "La cuenta fue aprobada correctamente.",
+    error:
+      "No se pudo aprobar la cuenta. Revisa los permisos e inténtalo nuevamente.",
+    "no-pendiente": "La cuenta ya estaba aprobada o no existe.",
+    "solicitud-invalida": "La solicitud no es válida.",
+  };
+
   if (estudiantesError) {
     return (
-      <main className="mx-auto w-full max-w-4xl p-8">
-        <h1 className="text-2xl font-semibold">Solicitudes pendientes</h1>
-        <p className="mt-4">
+      <div className="mx-auto w-full max-w-6xl">
+        <PageHeader
+          eyebrow="Administración"
+          title="Estudiantes"
+          description="Revisa y administra las solicitudes de acceso."
+        />
+        <StatusMessage type="error">
           No se pudo cargar la lista. Verifica los permisos de la base de datos
           e inténtalo nuevamente.
-        </p>
-      </main>
+        </StatusMessage>
+      </div>
     );
   }
 
-  const ids = (estudiantes ?? []).map((estudiante) => estudiante.id_usuario);
+  const listaEstudiantes: Estudiante[] = estudiantes ?? [];
+  const ids = listaEstudiantes.map((estudiante) => estudiante.id_usuario);
 
   let correosPorUsuario = new Map<string, string>();
 
@@ -54,13 +82,17 @@ export default async function AdminEstudiantesPage({
 
     if (usuariosError || !usuarios) {
       return (
-        <main className="mx-auto w-full max-w-4xl p-8">
-          <h1 className="text-2xl font-semibold">Solicitudes pendientes</h1>
-          <p className="mt-4">
+        <div className="mx-auto w-full max-w-6xl">
+          <PageHeader
+            eyebrow="Administración"
+            title="Estudiantes"
+            description="Revisa y administra las solicitudes de acceso."
+          />
+          <StatusMessage type="error">
             No se pudieron cargar los datos de las cuentas. Inténtalo
             nuevamente.
-          </p>
-        </main>
+          </StatusMessage>
+        </div>
       );
     }
 
@@ -69,84 +101,97 @@ export default async function AdminEstudiantesPage({
     );
   }
 
-  const mensajes: Record<string, string> = {
-    aprobado: "La cuenta fue aprobada correctamente.",
-    error:
-      "No se pudo aprobar la cuenta. Revisa los permisos e inténtalo nuevamente.",
-    "no-pendiente": "La cuenta ya estaba aprobada o no existe.",
-    "solicitud-invalida": "La solicitud no es válida.",
-  };
+  const columns: DataTableColumn<Estudiante>[] = [
+    {
+      key: "nombre",
+      header: "Nombre",
+      render: (estudiante) => (
+        <span className="font-medium text-[#252525]">
+          {estudiante.nombre_completo}
+        </span>
+      ),
+    },
+    {
+      key: "matricula",
+      header: "Matrícula",
+      render: (estudiante) => estudiante.matricula,
+    },
+    {
+      key: "correo",
+      header: "Correo",
+      render: (estudiante) =>
+        correosPorUsuario.get(estudiante.id_usuario) ?? "No disponible",
+    },
+    {
+      key: "carrera",
+      header: "Carrera",
+      render: (estudiante) => estudiante.carrera ?? "Sin asignar",
+    },
+    {
+      key: "semestre",
+      header: "Semestre",
+      render: (estudiante) => estudiante.semestre ?? "Sin asignar",
+    },
+    {
+      key: "accion",
+      header: "Acción",
+      render: (estudiante) => (
+        <form action={aprobarEstudianteAction}>
+          <input
+            type="hidden"
+            name="id_usuario"
+            value={estudiante.id_usuario}
+          />
+          <Button type="submit" variant="secondary">
+            Aprobar
+          </Button>
+        </form>
+      ),
+    },
+  ];
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 p-6 sm:p-8">
-      <h1 className="text-2xl font-semibold">Administración de estudiantes</h1>
-
-      <p className="mt-2 text-sm text-gray-600">
-        Revisa las solicitudes y aprueba las cuentas que correspondan.
-      </p>
+    <div className="mx-auto w-full max-w-6xl">
+      <PageHeader
+        eyebrow="Administración"
+        title="Estudiantes"
+        description="Revisa las solicitudes y aprueba las cuentas que correspondan."
+      />
 
       {params.estado && mensajes[params.estado] && (
-        <p className="mt-4 rounded border p-3" role="status">
-          {mensajes[params.estado]}
-        </p>
-      )}
-
-      <h2 className="mt-8 text-lg font-semibold">
-        Solicitudes pendientes ({estudiantes?.length ?? 0})
-      </h2>
-
-      {!estudiantes || estudiantes.length === 0 ? (
-        <p className="mt-4">No hay estudiantes pendientes de aprobación.</p>
-      ) : (
-        <div className="mt-4 overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50">
-              <tr>
-                <th className="p-3">Nombre</th>
-                <th className="p-3">Matrícula</th>
-                <th className="p-3">Correo</th>
-                <th className="p-3">Carrera</th>
-                <th className="p-3">Semestre</th>
-                <th className="p-3">Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {estudiantes.map((estudiante) => (
-                <tr
-                  key={estudiante.id_usuario}
-                  className="border-b last:border-0"
-                >
-                  <td className="p-3">{estudiante.nombre_completo}</td>
-                  <td className="p-3">{estudiante.matricula}</td>
-                  <td className="p-3">
-                    {correosPorUsuario.get(estudiante.id_usuario) ??
-                      "No disponible"}
-                  </td>
-                  <td className="p-3">{estudiante.carrera ?? "Sin asignar"}</td>
-                  <td className="p-3">
-                    {estudiante.semestre ?? "Sin asignar"}
-                  </td>
-                  <td className="p-3">
-                    <form action={aprobarEstudianteAction}>
-                      <input
-                        type="hidden"
-                        name="id_usuario"
-                        value={estudiante.id_usuario}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded border px-3 py-2 font-medium hover:bg-gray-100"
-                      >
-                        Aprobar
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mb-6">
+          <StatusMessage
+            type={params.estado === "aprobado" ? "success" : "error"}
+          >
+            {mensajes[params.estado]}
+          </StatusMessage>
         </div>
       )}
-    </main>
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-semibold text-[#252525]">
+            Solicitudes pendientes
+          </h2>
+          <span className="text-sm text-[#888888]">
+            {listaEstudiantes.length}{" "}
+            {listaEstudiantes.length === 1 ? "solicitud" : "solicitudes"}
+          </span>
+        </div>
+
+        {listaEstudiantes.length === 0 ? (
+          <EmptyState
+            title="No hay solicitudes pendientes"
+            description="Cuando un estudiante se registre, su solicitud aparecerá aquí."
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={listaEstudiantes}
+            getRowKey={(estudiante) => estudiante.id_usuario}
+          />
+        )}
+      </section>
+    </div>
   );
 }
